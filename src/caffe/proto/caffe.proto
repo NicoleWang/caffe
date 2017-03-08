@@ -306,7 +306,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 151 (last added: box_annotator_ohem_param)
+// LayerParameter next available layer-specific ID: 152 (last added: proposal_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -390,7 +390,8 @@ message LayerParameter {
   optional PoolingParameter pooling_param = 121;
   optional PowerParameter power_param = 122;
   optional PReLUParameter prelu_param = 131;
-  optional PSROIPoolingParameter psroi_pooling_param = 149;
+  optional PSROIPoolingParameter psroi_pooling_param = 151;
+  optional ProposalParameter proposal_param = 152;
   optional PythonParameter python_param = 130;
   optional RecurrentParameter recurrent_param = 146;
   optional ReductionParameter reduction_param = 136;
@@ -936,6 +937,17 @@ message PSROIPoolingParameter {
    required int32 output_dim = 2; // output channel number
    required int32 group_size = 3; // number of groups to encode position-sensitive score maps
  }
+
+message ProposalParameter {
+    optional uint32 feat_stride = 1 [default = 16];
+    optional uint32 base_size = 2 [default = 16];
+    optional uint32 min_size = 3 [default = 16];
+    repeated float ratio = 4;
+    repeated float scale = 5;
+    optional uint32 pre_nms_topn = 6 [default = 6000];
+    optional uint32 post_nms_topn = 7 [default = 300];
+    optional float nms_thresh = 8 [default = 0.7];
+}
 
 message PythonParameter {
   optional string module = 1;
