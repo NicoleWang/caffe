@@ -45,22 +45,24 @@ int main(int argc, char** argv) {
   //process image one by one
   std::ifstream infile(argv[3]);
   std::string imagepath;
+  clock_t start = clock();
+  int img_num = 0;
   while (infile >> imagepath) {
+      img_num++;
       cv::Mat img = cv::imread(imagepath);
       size_t s_pos = imagepath.rfind("/");
       std::string imname = imagepath.substr(s_pos, imagepath.length() - 1);
-      std::cout << img.cols << " " << img.rows << " " << img.channels() << std::endl; 
+      //std::cout << img.cols << " " << img.rows << " " << img.channels() << std::endl; 
       CHECK(!img.empty()) << "Unable to decode image" << imagepath;
       std::vector<Box> dets;
-
-      clock_t start = clock();
       detector.Detect(img, dets);
-      clock_t end = clock();
-      double duration = (end - start) / (double) CLOCKS_PER_SEC;
       std::cout << "Processing " << imname << "    Detect " << dets.size() << " chars " << std::endl;
-      std::cout << "Detection time: " << duration * 1000 << " ms" << std::endl;
+      //std::cout << "Detection time: " << duration * 1000 << " ms" << std::endl;
       cv::Mat vis_im = vis_boxes(img, dets);
       std::string savepath = resdir + "/" +imname;
       cv::imwrite(savepath, vis_im);
   }
+  clock_t end = clock();
+  double duration = (end - start) / (double) CLOCKS_PER_SEC;
+  std::cout << "average detection time: " << duration * 1000 * 1.0 / img_num << " ms" <<std::endl;
 }

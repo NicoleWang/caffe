@@ -127,6 +127,13 @@ void generate_anchors(int base_size,
       p_anchors[1] = center - scale_h;
       p_anchors[2] = center + scale_w;
       p_anchors[3] = center + scale_h;
+      //print base anchors
+      /*
+      std::cout << p_anchors[0] << " " 
+                << p_anchors[1] << " "
+                << p_anchors[2] << " "
+                << p_anchors[3] << std::endl;
+     */
       p_anchors += 4;
     } // endfor j
   }
@@ -163,6 +170,7 @@ void enumerate_proposals_cpu(const Dtype bottom4d[],
         p_proposal[1] = y + anchors[k * 4 + 1];
         p_proposal[2] = x + anchors[k * 4 + 2];
         p_proposal[3] = y + anchors[k * 4 + 3];
+        //printf("%f\t%f\t%f\t%f\n", p_proposal[0], p_proposal[1], p_proposal[2], p_proposal[3]);
         p_proposal[4]
             = transform_box(p_proposal,
                             dx, dy, d_log_w, d_log_h,
@@ -275,8 +283,10 @@ void ProposalLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     const Dtype scale_H = p_img_info_cpu[2];
     const Dtype scale_W = p_img_info_cpu[3];
     // minimum box width & height
-    const Dtype min_box_H = min_size_ * scale_H;
-    const Dtype min_box_W = min_size_ * scale_W;
+    //const Dtype min_box_H = min_size_ * scale_H;
+    //const Dtype min_box_W = min_size_ * scale_W;
+    const Dtype min_box_H = min_size_ ;
+    const Dtype min_box_W = min_size_ ;
     // number of all proposals = num_anchors * H * W
     const int num_proposals = anchors_.shape(0) * bottom_H * bottom_W;
     // number of top-n proposals before NMS

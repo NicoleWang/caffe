@@ -163,7 +163,6 @@ void ProposalLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
                                        const vector<Blob<Dtype>*>& top)
 {
   CHECK_EQ(bottom[0]->shape(0), 1) << "Only single item batches are supported";
-  //std::cout << "Enter Proposal " << std::endl;
 
   const Dtype* p_bottom_item = bottom[0]->gpu_data();
   const Dtype* p_d_anchor_item = bottom[1]->gpu_data();
@@ -189,8 +188,10 @@ void ProposalLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     const Dtype scale_H = p_img_info_cpu[2];
     const Dtype scale_W = p_img_info_cpu[3];
     // minimum box width & height
-    const Dtype min_box_H = min_size_ * scale_H;
-    const Dtype min_box_W = min_size_ * scale_W;
+    //const Dtype min_box_H = min_size_ * scale_H;
+    //const Dtype min_box_W = min_size_ * scale_W;
+    const Dtype min_box_H = min_size_ ;
+    const Dtype min_box_W = min_size_ ;
     // number of all proposals = num_anchors * H * W
     const int num_proposals = anchors_.shape(0) * bottom_H * bottom_W;
     // number of top-n proposals before NMS

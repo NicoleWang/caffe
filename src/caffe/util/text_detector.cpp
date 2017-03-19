@@ -2,6 +2,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <algorithm>
 #include <caffe/util/text_detector.hpp>
+//#define CPU_ONLY
 
 namespace caffe {
 float iou(Box& b1, Box& b2) {
@@ -139,8 +140,10 @@ void Detector::Preprocess(const cv::Mat& img, cv::Mat& out_img) {
     cv::resize(sample, resized_img, dst_size);
 
     /* substract mean value */
-    resized_img -= mean_;
-    out_img = resized_img.clone();
+    cv::Mat temp;
+    resized_img.convertTo(temp, CV_32FC3);
+    temp -= mean_;
+    out_img = temp.clone();
 
     /* convert input image information to the input format of the network */
     Blob<float>* input_info = net_->input_blobs()[1];
@@ -228,6 +231,12 @@ void Detector::retrieve_bboxes(const shared_ptr<Blob<float> >& rois_blob,
         out_scores[i] = *(scores + scores_blob->offset(i) + 1);
         const float* cur_delta = deltas + deltas_blob->offset(i);
         const float* cur_roi = rois + rois_blob->offset(i) + 1;
+        /*
+        std::cout << cur_roi[0] << " " 
+                  << cur_roi[1] << " "
+                  << cur_roi[2] << " "
+                  << cur_roi[3] << std::endl;
+        */
         get_predict_box(cur_roi, cur_delta, out_boxes, i, image_scale_);
     }
 }
@@ -254,7 +263,7 @@ void  Detector::Detect(const cv::Mat& img, std::vector<Box>& final_dets) {
 
     std::vector<cv::Mat> input_channels;
     WrapInputLayer(&input_channels, post_img);
-    net_->ForwardPrefilled();
+    net_->Forward();
 
     const shared_ptr<Blob<float> > rois_blob = net_->blob_by_name("rois");
 
