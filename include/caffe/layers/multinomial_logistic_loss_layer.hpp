@@ -85,6 +85,7 @@ class MultinomialLogisticLossLayer : public LossLayer<Dtype> {
    */
   virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+   virtual inline int ExactNumBottomBlobs() const { return 2; }
 };
 
 }  // namespace caffe

@@ -391,6 +391,7 @@ message LayerParameter {
   optional PowerParameter power_param = 122;
   optional PReLUParameter prelu_param = 131;
   optional PSROIPoolingParameter psroi_pooling_param = 151;
+  optional CrossCorrelationParameter cross_correlation_param = 153;
   optional ProposalParameter proposal_param = 152;
   optional PythonParameter python_param = 130;
   optional RecurrentParameter recurrent_param = 146;
@@ -937,6 +938,10 @@ message PSROIPoolingParameter {
    required int32 output_dim = 2; // output channel number
    required int32 group_size = 3; // number of groups to encode position-sensitive score maps
  }
+
+message CrossCorrelationParameter {
+   required ConvolutionParameter conv_param = 1; 
+}
 
 message ProposalParameter {
     optional uint32 feat_stride = 1 [default = 16];

@@ -93,7 +93,9 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   bool is_1x1_;
   bool force_nd_im2col_;
 
- private:
+ //private:
+ /* modified by wangyuzhuo 20170612 for cross correlation layer */
+ protected:
   // wrap im2col/col2im so we don't have to remember the (long) argument lists
   inline void conv_im2col_cpu(const Dtype* data, Dtype* col_buff) {
     if (!force_nd_im2col_ && num_spatial_axes_ == 2) {
@@ -155,7 +157,6 @@ class BaseConvolutionLayer : public Layer<Dtype> {
     }
   }
 #endif
-
   int num_kernels_im2col_;
   int num_kernels_col2im_;
   int conv_out_channels_;

@@ -25,6 +25,14 @@ template <typename Dtype>
 void ConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   const Dtype* weight = this->blobs_[0]->cpu_data();
+
+#ifdef DEBUG_INFO
+  std::cout << "weight data:" <<  std::endl;
+  for (int i = 0; i < this->blobs_[0]->count(1); ++i) {
+      std::cout << weight[i] << "    ";
+  }
+  std::cout << std::endl;
+#endif
   for (int i = 0; i < bottom.size(); ++i) {
     const Dtype* bottom_data = bottom[i]->cpu_data();
     Dtype* top_data = top[i]->mutable_cpu_data();
@@ -70,6 +78,24 @@ void ConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       }
     }
   }
+#if 0 
+  //if (this->layer_param().name() == "conv5" || this->layer_param().name() == "conv5_p") {
+  if (this->layer_param().name() == "conv5_p") {
+      std::cout << "Layer Name: " << this->layer_param().name() << std::endl;
+      const Dtype* bdata = bottom[0]->cpu_data();
+      const Dtype* tdata = top[0]->cpu_data();
+      std::cout << "Bottom Data: " << std::endl;
+      for (int i = 0; i < bottom[0]->count(2); ++i){
+          std::cout << bdata[i] << "    ";
+      }
+      std::cout << std::endl << std::endl << std::endl;
+      std::cout << "Top Data: " << std::endl;
+      for (int i = 0; i < top[0]->count(2); ++i){
+          std::cout << tdata[i] << "    ";
+      }
+      std::cout << std::endl << std::endl << std::endl;
+  }
+#endif
 }
 
 #ifdef CPU_ONLY

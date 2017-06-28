@@ -5,7 +5,6 @@
 #include "caffe/layer_factory.hpp"
 #include "caffe/layers/scale_layer.hpp"
 #include "caffe/util/math_functions.hpp"
-
 namespace caffe {
 
 template <typename Dtype>
@@ -134,6 +133,16 @@ void ScaleLayer<Dtype>::Forward_cpu(
   if (bias_layer_) {
     bias_layer_->Forward(bias_bottom_vec_, top);
   }
+#if 0
+  if (this->layer_param().name() == "scale4" || this->layer_param().name() == "scale4_p") {
+      std::cout << "Layer: " << this->layer_param().name() << std::endl;
+      const Dtype* tdata = top[0]->cpu_data();
+      for (int i = 0; i < 50;++i) {
+          std::cout << tdata[i * 20] << "    ";
+      }
+      std::cout << std::endl << std::endl << std::endl;
+  }
+#endif
 }
 
 template <typename Dtype>
