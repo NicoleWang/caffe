@@ -26,13 +26,6 @@ void ConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   const Dtype* weight = this->blobs_[0]->cpu_data();
 
-#ifdef DEBUG_INFO
-  std::cout << "weight data:" <<  std::endl;
-  for (int i = 0; i < this->blobs_[0]->count(1); ++i) {
-      std::cout << weight[i] << "    ";
-  }
-  std::cout << std::endl;
-#endif
   for (int i = 0; i < bottom.size(); ++i) {
     const Dtype* bottom_data = bottom[i]->cpu_data();
     Dtype* top_data = top[i]->mutable_cpu_data();
