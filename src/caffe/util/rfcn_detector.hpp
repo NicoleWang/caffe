@@ -1,5 +1,5 @@
-#ifndef CAFFE_UTIL_TEXT_DETECTOR_
-#define CAFFE_UTIL_TEXT_DETECTOR_
+#ifndef CAFFE_UTIL_RFCN_DETECTOR_
+#define CAFFE_UTIL_RFCN_DETECTOR_
 #include <caffe/caffe.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <iosfwd>
 #include <memory>
+#include <caffe/util/text_detector.hpp>
 
 namespace caffe {
+/*
 struct Box{
     float x;
     float y;
@@ -28,14 +30,11 @@ struct Box{
 
 float iou(Box& b1, Box& b2);
 void nms(std::vector<Box>& boxes, std::vector<Box>& out, float thresh);
-void get_predict_box(const float* roi, const float* delta, std::vector<float>& out, const int idx, float ratio);
-void draw_boxes(cv::Mat& im, std::vector<float>& boxes, std::vector<float>& scores);
-void draw_boxes(cv::Mat& im, std::vector<Box>& boxes);
-void transform_boxes(std::vector<float>& scores, std::vector<float>& boxes,std::vector<Box>& out);
+*/
 
-class Detector {
+class RFCNDetector {
  public:
-  Detector(const string& model_file,
+  RFCNDetector(const string& model_file,
            const string& weights_file,
            const int gpu_id);
   //std::vector<vector<float> > Detect(const cv::Mat& img);

@@ -44,6 +44,19 @@ void SoftmaxWithLossLayer<Dtype>::Reshape(
       bottom[0]->CanonicalAxisIndex(this->layer_param_.softmax_param().axis());
   outer_num_ = bottom[0]->count(0, softmax_axis_);
   inner_num_ = bottom[0]->count(softmax_axis_ + 1);
+  /*
+  std::cout << "prediction: " << std::endl;
+  std::cout << bottom[0]->num() << "  "
+            << bottom[0]->channels() << " "
+            << bottom[0]->height() << " "
+            << bottom[0]->width() << std::endl;
+  std::cout << "labels: " << std::endl;
+  std::cout << bottom[1]->num() << "  "
+            << bottom[1]->channels() << " "
+            << bottom[1]->height() << " "
+            << bottom[1]->width() << std::endl;
+  std::cout << outer_num_ << "   " << inner_num_ << std::endl;
+  */
   CHECK_EQ(outer_num_ * inner_num_, bottom[1]->count())
       << "Number of labels must match number of predictions; "
       << "e.g., if softmax axis == 1 and prediction shape is (N, C, H, W), "
@@ -103,9 +116,15 @@ void SoftmaxWithLossLayer<Dtype>::Forward_cpu(
       }
       DCHECK_GE(label_value, 0);
       DCHECK_LT(label_value, prob_.shape(softmax_axis_));
+      float temp = prob_data[i * dim + label_value * inner_num_ + j];
       loss -= log(std::max(prob_data[i * dim + label_value * inner_num_ + j],
                            Dtype(FLT_MIN)));
       ++count;
+      if (label_value > 0.8) {
+      std::cout << "label value: " << label_value << " "
+                << "res velue: " << temp << " " 
+                << "loss; " << loss << std::endl;
+      }
     }
   }
   top[0]->mutable_cpu_data()[0] = loss / get_normalizer(normalization_, count);

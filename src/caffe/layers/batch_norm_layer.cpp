@@ -102,6 +102,13 @@ void BatchNormLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
         mean_.mutable_cpu_data());
   }
 
+if(this->layer_param_.name()=="fc2/bn")
+{
+    std::cerr<<"bottom:"<<bottom[0]->cpu_data()[0]<<std::endl;
+    std::cerr<<"mean:"<<mean_.cpu_data()[0]<<std::endl;
+    std::cerr<<"var:"<<variance_.cpu_data()[0]<<std::endl;
+}
+
   // subtract mean
   caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, num, channels_, 1, 1,
       batch_sum_multiplier_.cpu_data(), mean_.cpu_data(), 0.,

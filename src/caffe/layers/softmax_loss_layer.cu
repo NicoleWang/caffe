@@ -21,9 +21,14 @@ __global__ void SoftmaxLossForwardGPU(const int nthreads,
       loss[index] = 0;
       counts[index] = 0;
     } else {
+      float temp = prob_data[n * dim + label_value * spatial_dim + s];
       loss[index] = -log(max(prob_data[n * dim + label_value * spatial_dim + s],
                       Dtype(FLT_MIN)));
       counts[index] = 1;
+      /*
+      if (label_value > 0){
+          //printf("label: %d \t prob:%f \t loss: %f\n", label_value, temp, loss[index]);
+      } */
     }
   }
 }
