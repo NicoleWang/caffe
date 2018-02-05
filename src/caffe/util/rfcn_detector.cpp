@@ -3,61 +3,109 @@
 #include <algorithm>
 #include <caffe/util/rfcn_detector.hpp>
 #include <caffe/util/text_detector.hpp>
-//#define CPU_ONLY
-
+#include <caffe/util/proposal.hpp>
+#define CPU_ONLY
+using std::max;
+using std::min;
 namespace caffe {
-/*
-float iou(Box& b1, Box& b2) {
-    float xstart = std::max(b1.x, b2.x);
-    float ystart = std::max(b1.y, b2.y);
-    float xend = std::min(b1.x + b1.w - 1, b2.x + b2.w - 1);
-    float yend = std::min(b1.y + b1.h - 1, b2.y + b2.h - 1);
+    void PSRoI::do_psroi(const Blob<float>* class_blob, const Blob<float>* bbox_blob, const Blob<float>* rois_blob, std::vector<float>& out_scores, std::vector<float>& out_bboxes) {
+        //sanity checking
+        /*
+        std::cout << "class feat shape: " << class_blob->num() << " " << class_blob->channels() << " " << class_blob->height() << " " << class_blob->width() << std::endl;
+        std::cout << "bbox feat shape: " << bbox_blob->num() << " " << bbox_blob->channels() << " " << bbox_blob->height() << " " << bbox_blob->width() << std::endl;
+        std::cout << "roi feat shape: " << rois_blob->num() << " " << rois_blob->channels() << " " << rois_blob->height() << " " << rois_blob->width() << std::endl;
+        */
+        CHECK_EQ(class_blob->width(), bbox_blob->width())
+            << "class blob and bbox blob must have same width";
+        CHECK_EQ(class_blob->height(), bbox_blob->height())
+            << "class blob and bbox blob must have same height"; 
 
-    float delta_w = xend - xstart + 1;
-    float delta_h = yend - ystart + 1;
-    if (delta_w <= 0.0f || delta_h <= 0){
-        return 0.0f;
-    }
+        int height = class_blob->height();
+        int width = class_blob->width();
+        int roi_num = rois_blob->num();
+        out_scores.resize(roi_num * class_dim_/2);
+        out_bboxes.resize(roi_num * bbox_dim_/2);
+        //std::vector<float> rfcn_scores(roi_num * class_dim_, 0);
+        //std::vector<float> rfcn_bboxes(roi_num * bbox_dim_, 0);
+        const float* class_map = class_blob->cpu_data();
+        const float* bbox_map = bbox_blob->cpu_data();
+        const float* rois = rois_blob->cpu_data();
 
-    float area1 = b1.w * b1.h;
-    float area2 = b2.w * b2.h;
-    float inter_area = delta_w * delta_h;
+        // get roi scores and bbox deltas for each roi
+        for (unsigned int i = 0; i < roi_num; ++i) {
+            std::vector<float> roi_score(2, 0.0);
+            std::vector<float> roi_bbox(4, 0.0);
+            const float* rois_data = rois + i*5;
+            float roi_start_w = round(rois_data[1]) * spatial_scale_;
+            float roi_start_h = round(rois_data[2]) * spatial_scale_;
+            float roi_end_w = round(rois_data[3] + 1.0) * spatial_scale_;
+            float roi_end_h = round(rois_data[4] + 1.0) * spatial_scale_;
+            float roi_width = max(roi_end_w - roi_start_w, (float)0.1);
+            float roi_height = max(roi_end_h - roi_start_h, (float)0.1);
+            float bin_size_h = roi_height / pooled_height_;
+            float bin_size_w = roi_width / pooled_width_;
 
-    return inter_area / (area1 + area2 - inter_area);
+            for (unsigned int j = 0; j < pooled_height_; ++j) {
+                for (unsigned k = 0; k < pooled_width_; ++k) {
+                    int hstart = floor(j*bin_size_h + roi_start_h);
+                    int wstart = floor(k*bin_size_w + roi_start_w);
+                    int hend = ceil((j+1)*bin_size_h + roi_start_h);
+                    int wend = ceil((k+1)*bin_size_w + roi_start_w);
 
-}
+                    hstart = min(max(hstart, 0), height);
+                    hend = min(max(hend, 0), height);
+                    wstart = min(max(wstart, 0), width);
+                    wend = min(max(wend, 0), width);
+                    bool is_empty = (hend<= hstart) || (wend <= wstart);
+                    if(is_empty) {
+                        continue;
+                    }
+                    float bin_area = (hend - hstart)*(wend - wstart);
+                    for (unsigned int cs = 0; cs < 2; ++cs) {
+                        float bin_score = 0;
+                        int score_c = (cs)*pooled_height_*pooled_width_ + j*pooled_width_ + k;
+                        //std::cout << "cs=" <<cs<<" ";
+                        const float* score_data = class_map + score_c*height*width; 
+                        for (int h=hstart; h < hend; ++h){
+                            for (int w=wstart; w < wend; ++w) {
+                                int score_index = h*width + w;
+                                //std::cout << score_data[score_index] << " ";
+                                bin_score += score_data[score_index];
+                            } 
+                        }
+                        //std::cout << std::endl;
+                        roi_score[cs] += (bin_score / bin_area);
+                    }
+                    for (unsigned int cb =0; cb < 4; ++cb){
+                        int bbox_c = (4+cb)*pooled_height_*pooled_width_ + j*pooled_width_ + k;
+                        float bin_bbox = 0.0;
+                        const float* bbox_data = bbox_map + bbox_c*width*height;
+                        for (int h=hstart; h < hend; ++h){
+                            for (int w=wstart; w < wend; ++w) {
+                                int bbox_index = h*width + w;
+                                bin_bbox += bbox_data[bbox_index];
+                            }
+                        }
+                        roi_bbox[cb] += (bin_bbox/bin_area);
+                    }
 
-bool compare_box(const Box& b1, const Box& b2) {
-    return (b1.score > b2.score ? true:false);
-}
-
-void nms(std::vector<Box>& boxes, std::vector<Box>& out, float thresh) {
-    std::vector<bool> mask(boxes.size(), true);
-    std::sort(boxes.begin(), boxes.end(), compare_box);
-
-    int cnt = 0;
-    for (unsigned int i = 0; i < boxes.size(); ++i) {
-        if(!mask[i]){
-            continue;
-        }
-        cnt++;
-        for (unsigned int j = i + 1; j < boxes.size(); ++j){
-            if(mask[j] && iou(boxes[i], boxes[j]) >= thresh) {
-                mask[j] = false;
+                }//end of k  
+            }//end of j
+            int patch_num = pooled_width_ * pooled_width_;
+            //do softmax
+            //std::cout << "roi score: " << roi_score[0] << " " << roi_score[1] << std::endl;
+            roi_score[0] /= patch_num;
+            roi_score[1] /= patch_num;
+            float max_score = max(roi_score[0], roi_score[1]);
+            roi_score[0] -= max_score;
+            roi_score[1] -= max_score;
+            float exp_sum = exp(roi_score[0] ) + exp(roi_score[0]);
+            out_scores[i] = exp(roi_score[1])/exp_sum;
+            for (int c = 0; c < 4; ++c){
+                out_bboxes[i*4+c] = roi_bbox[c] / patch_num;
             }
-        }
-    }
-
-    out.resize(cnt);
-    cnt = 0;
-    for (unsigned int i = 0; i < boxes.size(); ++i) {
-        if (mask[i]){
-            out[cnt] = boxes[i];
-            cnt++;
-        }
-    }
-}
-*/
+        }//end of i
+    }//end of function
 
 RFCNDetector::RFCNDetector(const string& model_file,
                    const string& weights_file,
@@ -74,11 +122,11 @@ RFCNDetector::RFCNDetector(const string& model_file,
     net_->CopyTrainedLayersFrom(weights_file);
     //printf("Net has %d inputs and %d outputs\n", net_->num_inputs(), net_->num_outputs());
     CHECK_EQ(net_->num_inputs(), 2) << "Network should have exactly two inputs (image data and image info)";
-    CHECK_EQ(net_->num_outputs(), 2) << "Network should have exactly two outputs (scores and pred_boxes).";
+    //CHECK_EQ(net_->num_outputs(), 3) << "Network should have exactly two outputs (scores, deltas and rois).";
 
     mean_ = cv::Scalar(102.9801, 115.9465, 122.7717);
-    target_size_ = 600;
-    max_size_ = 1000;
+    target_size_ = 256;
+    max_size_ = 512;
 
     Blob<float>* input_image = net_->input_blobs()[0];
     num_channels_ = input_image->channels();
@@ -96,6 +144,7 @@ void RFCNDetector::WrapInputLayer(std::vector<cv::Mat>* input_channels, const cv
     Blob<float>* input_layer = net_->input_blobs()[0];
     int width = input_layer->width();
     int height = input_layer->height();
+
 
     float* input_data = input_layer->mutable_cpu_data();
     for (int i = 0; i < input_layer->channels(); ++i) {
@@ -156,8 +205,77 @@ void RFCNDetector::Preprocess(const cv::Mat& img, cv::Mat& out_img) {
     image_info[2] = ratio;
 }
 
+
+
 /*
-void get_predict_box(const float* roi, 
+
+void draw_boxes(cv::Mat& im, std::vector<float>& boxes, std::vector<float>& scores) {
+    for (int i = 0; i < boxes.size() / 4; ++i) {
+        cv::Point top_left((int)(boxes[i*4]), (int)(boxes[i*4 + 1]));
+        cv::Point right_bottom((int)(boxes[i*4 + 2]), (int)(boxes[i*4 + 3]));
+        if (scores[i] > 0.3f) {
+            cv::rectangle(im, top_left, right_bottom, cv::Scalar(0,0,255));
+        }
+    }
+    cv::imwrite("result.jpg", im);
+}
+void draw_boxes(cv::Mat& im, std::vector<Box>& boxes) {
+    for (int i = 0; i < boxes.size(); ++i) {
+        cv::Point top_left((int)(boxes[i].x), (int)(boxes[i].y));
+        cv::Point right_bottom((int)(boxes[i].x + boxes[i].w - 1), (int)(boxes[i].y + boxes[i].h - 1));
+        if (boxes[i].score > 0.3f) {
+            cv::rectangle(im, top_left, right_bottom, cv::Scalar(0,0,255));
+        }
+    }
+    cv::imwrite("result.jpg", im);
+}
+*/
+void trans_vec_to_boxes(std::vector<float>& scores,
+                     std::vector<float>& boxes,
+                     std::vector<Box>& out) {
+    out.resize(scores.size());
+    for (unsigned int i = 0; i < scores.size(); ++i) {
+        out[i].score = scores[i];
+        float x1 = boxes[i*4];
+        float y1 = boxes[i*4 + 1];
+        float x2 = boxes[i*4 + 2];
+        float y2 = boxes[i*4 + 3];
+        out[i].x = x1;
+        out[i].y = y1;
+        out[i].w = x2 - x1 + 1.0f;
+        out[i].h = y2 - y1 + 1.0f;
+    }
+}
+
+void RFCNDetector::retrieve_bboxes(const Blob<float>* rois_blob,
+                       const std::vector<float>& deltas_vec,
+                       std::vector<float>& out_boxes) {
+    int num_boxes = rois_blob->num();
+    const float* rois = rois_blob->cpu_data();
+    out_boxes.resize(4*num_boxes);
+   
+    for (int i = 0; i < num_boxes; ++i){
+        const float* roi = rois + rois_blob->offset(i) + 1;
+        float w = (roi[2] - roi[0]) / image_scale_ + 1.0f;
+        float h = (roi[3] - roi[1]) / image_scale_ + 1.0f;
+        float ctr_x = roi[0] / image_scale_ + 0.5f * w;
+        float ctr_y = roi[1] / image_scale_ + 0.5f * h;
+
+        float pred_ctr_x = deltas_vec[i*4] * w + ctr_x;
+        float pred_ctr_y = deltas_vec[i*4+1] * h + ctr_y;
+        float pred_w = std::exp(deltas_vec[i*4+2]) * w;
+        float pred_h = std::exp(deltas_vec[i*4+3]) * h;
+
+        //update upper-left corner location
+        out_boxes[i * 4] = pred_ctr_x - 0.5f * pred_w;
+        out_boxes[i * 4 + 1] = pred_ctr_y - 0.5f * pred_h;
+        out_boxes[i * 4 + 2] = pred_ctr_x + 0.5f * pred_w;
+        out_boxes[i * 4 + 3] = pred_ctr_y + 0.5f * pred_h;
+    }
+}
+
+/*
+void RFCNDetector::add_deltas_to_rois(const float* roi, 
                      const float* delta, 
                      std::vector<float>& out,
                      const int idx,
@@ -181,73 +299,11 @@ void get_predict_box(const float* roi,
     out[idx * 4 + 2] = pred_ctr_x + 0.5f * pred_w;
     out[idx * 4 + 3] = pred_ctr_y + 0.5f * pred_h;
 }
-
-void draw_boxes(cv::Mat& im, std::vector<float>& boxes, std::vector<float>& scores) {
-    for (int i = 0; i < boxes.size() / 4; ++i) {
-        cv::Point top_left((int)(boxes[i*4]), (int)(boxes[i*4 + 1]));
-        cv::Point right_bottom((int)(boxes[i*4 + 2]), (int)(boxes[i*4 + 3]));
-        if (scores[i] > 0.3f) {
-            cv::rectangle(im, top_left, right_bottom, cv::Scalar(0,0,255));
-        }
-    }
-    cv::imwrite("result.jpg", im);
-}
-void draw_boxes(cv::Mat& im, std::vector<Box>& boxes) {
-    for (int i = 0; i < boxes.size(); ++i) {
-        cv::Point top_left((int)(boxes[i].x), (int)(boxes[i].y));
-        cv::Point right_bottom((int)(boxes[i].x + boxes[i].w - 1), (int)(boxes[i].y + boxes[i].h - 1));
-        if (boxes[i].score > 0.3f) {
-            cv::rectangle(im, top_left, right_bottom, cv::Scalar(0,0,255));
-        }
-    }
-    cv::imwrite("result.jpg", im);
-}
-void transform_boxes(std::vector<float>& scores,
-                     std::vector<float>& boxes,
-                     std::vector<Box>& out) {
-    out.resize(scores.size());
-    for (unsigned int i = 0; i < scores.size(); ++i) {
-        out[i].score = scores[i];
-        float x1 = boxes[i*4];
-        float y1 = boxes[i*4 + 1];
-        float x2 = boxes[i*4 + 2];
-        float y2 = boxes[i*4 + 3];
-        out[i].x = x1;
-        out[i].y = y1;
-        out[i].w = x2 - x1 + 1.0f;
-        out[i].h = y2 - y1 + 1.0f;
-    }
-}
 */
-
-void RFCNDetector::retrieve_bboxes(const shared_ptr<Blob<float> >& rois_blob,
-                       const Blob<float>* deltas_blob,
-                       const Blob<float>* scores_blob,
-                       std::vector<float>& out_boxes,
-                       std::vector<float>& out_scores) {
-    int num_boxes = scores_blob->shape(0);
-    const float* deltas = deltas_blob->cpu_data();
-    const float* scores = scores_blob->cpu_data();
-    const float* rois = rois_blob->cpu_data();
-    out_boxes.resize(4*num_boxes);
-    out_scores.resize(num_boxes);
-   
-    for (int i = 0; i < num_boxes; ++i){
-        out_scores[i] = *(scores + scores_blob->offset(i) + 1);
-        const float* cur_delta = deltas + deltas_blob->offset(i);
-        const float* cur_roi = rois + rois_blob->offset(i) + 1;
-        /*
-        std::cout << cur_roi[0] << " " 
-                  << cur_roi[1] << " "
-                  << cur_roi[2] << " "
-                  << cur_roi[3] << std::endl;
-        */
-        get_predict_box(cur_roi, cur_delta, out_boxes, i, image_scale_);
-    }
-}
 
 void  RFCNDetector::Detect(const cv::Mat& img, std::vector<Box>& final_dets) {
     cv::Mat post_img;
+    //reshape and prepare image data
     Preprocess(img, post_img);
     Blob<float>* input_image = net_->input_blobs()[0];
     Blob<float>* input_info = net_->input_blobs()[1];
@@ -260,6 +316,9 @@ void  RFCNDetector::Detect(const cv::Mat& img, std::vector<Box>& final_dets) {
     shape2[0] = 1;
     shape2[1] = 1;
     shape2[2] = 3;
+    std::cout << "ori shape: " << img.cols << " " << img.rows << std::endl
+              << "new shape: " << post_img.cols << " " << post_img.rows << std::endl;
+    std::cout << "image scale: " << image_scale_ << std::endl;
     input_image->Reshape(shape1);
     input_info->Reshape(shape2);
     
@@ -268,18 +327,77 @@ void  RFCNDetector::Detect(const cv::Mat& img, std::vector<Box>& final_dets) {
 
     std::vector<cv::Mat> input_channels;
     WrapInputLayer(&input_channels, post_img);
+
+    //do net forward
     net_->Forward();
 
-    const shared_ptr<Blob<float> > rois_blob = net_->blob_by_name("rois");
+    //get all output blobs
+    //const shared_ptr<Blob<float> > rois_blob = net_->blob_by_name("rois");
+    const Blob<float>* rpn_cls_blob = net_->blob_by_name("rpn_cls_prob_reshape").get();
+    const Blob<float>* rpn_bbox_blob = net_->blob_by_name("rpn_bbox_pred_new").get();
+    const Blob<float>* img_info = net_->blob_by_name("im_info").get();
+    const Blob<float>* bbox_blob  = net_->blob_by_name("rfcn_bbox").get();
+    const Blob<float>* score_blob = net_->blob_by_name("text_rfcn_cls").get();
+    //const Blob<float>* bbox_blob  = net_->output_blobs()[0];
+    //const Blob<float>* score_blob = net_->output_blobs()[2];
+    const float* bbox_data = bbox_blob->cpu_data();
+    const float* score_data = score_blob->cpu_data();
 
-    Blob<float>* bbox_blob  = net_->output_blobs()[0];
-    Blob<float>* score_blob = net_->output_blobs()[1];
+    //get image infos
+    const float* img_info_data = img_info->cpu_data();
+    float img_hei = img_info_data[0];
+    float img_wid = img_info_data[1];
+    float img_scale = img_info_data[2];
+
+    // get rpn proposals
+    caffe::Proposal rpn_proposals;
+    rpn_proposals.generate_proposals(rpn_cls_blob, rpn_bbox_blob, img_wid, img_hei, img_scale);
+    cv::Mat props_mat = rpn_proposals.get_proposals();
+    //std::cout << "Proposals: " << std::endl << props_mat << std::endl;
+    Blob<float> rois_blob;
+    std::vector<int> rois_shape(2);
+    rois_shape[0] = props_mat.rows;
+    rois_shape[1] = props_mat.cols;
+    rois_blob.Reshape(rois_shape);
+    float* rois_data = rois_blob.mutable_cpu_data();
+    float* props_data =(float*) props_mat.data;
+    for (int i = 0; i < rois_shape[0]*rois_shape[1]; ++i) {
+        rois_data[i] = props_data[i];
+    }
+
+
     std::vector<float> res_scores;
+    std::vector<float> res_deltas;
     std::vector<float> res_bboxes;
-    retrieve_bboxes(rois_blob, bbox_blob, score_blob, res_bboxes, res_scores);
+    caffe::PSRoI ps_roi;
+    /*
+    for (unsigned int c = 0; c < 49; ++c) {
+        std::cout << "score data:" << std::endl;
+        const float* t_data = score_data + score_blob->offset(0,c);
+        std::cout<<t_data[0]<<" "<<t_data[1]<<" "<<t_data[3]<<" "<<t_data[4]<<std::endl;
+        t_data = score_data+score_blob->offset(0, c+49);
+        std::cout<<t_data[0]<<" "<<t_data[1]<<" "<<t_data[3]<<" "<<t_data[4]<<std::endl;
+    }
+    */
+    
+    
+    
+    ps_roi.do_psroi(score_blob, bbox_blob, &rois_blob, res_scores, res_deltas);
+    /*
+    for (int i = 0; i < res_deltas.size(); ++i) {
+        if (i%4 == 0) {
+            std::cout << res_scores[i/4] << std::endl;
+        }
+        std::cout << res_deltas[i]  << " ";
+        if (i%4 == 0) {
+            std::cout << std::endl;
+        }
+    }
+    */
 
+    retrieve_bboxes(&rois_blob, res_deltas,  res_bboxes);
     std::vector<Box> new_boxes;
-    transform_boxes(res_scores, res_bboxes, new_boxes);
+    trans_vec_to_boxes(res_scores, res_bboxes, new_boxes);
 
     //std::vector<Box> nms_boxes;
     nms(new_boxes, final_dets, 0.5);

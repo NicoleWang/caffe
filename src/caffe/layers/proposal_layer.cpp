@@ -22,6 +22,7 @@ int transform_box(Dtype box[],
   // center location of box
   const Dtype ctr_x = box[0] + (Dtype)0.5 * w;
   const Dtype ctr_y = box[1] + (Dtype)0.5 * h;
+  //std::cout << w << " " << h << " " << ctr_x << " " << ctr_y << std::endl;
 
   // new center location according to gradient (dx, dy)
   const Dtype pred_ctr_x = dx * w + ctr_x;
@@ -36,6 +37,7 @@ int transform_box(Dtype box[],
   // update lower-right corner location
   box[2] = pred_ctr_x + (Dtype)0.5 * pred_w;
   box[3] = pred_ctr_y + (Dtype)0.5 * pred_h;
+  //std::cout << box[0] <<" " << box[1] << " " << box[2] << " " << box[3] << std::endl;
 
   // adjust new corner locations to be within the image region,
   box[0] = std::max((Dtype)0,  std::min(box[0],  img_W - (Dtype)1));
@@ -107,8 +109,10 @@ void generate_anchors(int base_size,
                       Dtype anchors[])
 {
   // base box's width & height & center location
+  //std::cout <<"anchors original: " << std::endl;
   const Dtype base_area = (Dtype)(base_size * base_size);
   const Dtype center = (Dtype)0.5 * (base_size - (Dtype)1);
+  //std::cout << "base area: " << base_area << " " << "center: " << center << std::endl;
 
   // enumerate all transformed boxes
   Dtype* p_anchors = anchors;
@@ -116,11 +120,13 @@ void generate_anchors(int base_size,
     // transformed width & height for given ratio factors
     const Dtype ratio_w = (Dtype)ROUND(sqrt(base_area / ratios[i]));
     const Dtype ratio_h = (Dtype)ROUND(ratio_w * ratios[i]);
+    //std::cout << "rw: " << ratio_w << " " << "rh: " << ratio_h << std::endl; 
 
     for (int j = 0; j < num_scales; ++j) {
       // transformed width & height for given scale factors
       const Dtype scale_w = (Dtype)0.5 * (ratio_w * scales[j] - (Dtype)1);
       const Dtype scale_h = (Dtype)0.5 * (ratio_h * scales[j] - (Dtype)1);
+      //std::cout << "sw: " << scale_w << " " << "sh: " << scale_h << std::endl; 
 
       // (x1, y1, x2, y2) for transformed box
       p_anchors[0] = center - scale_w;
@@ -153,6 +159,7 @@ void enumerate_proposals_cpu(const Dtype bottom4d[],
 {
   Dtype* p_proposal = proposals;
   const int bottom_area = bottom_H * bottom_W;
+  std::cout << "Original Proposals: " << std::endl;
 
   for (int h = 0; h < bottom_H; ++h) {
     for (int w = 0; w < bottom_W; ++w) {
@@ -171,6 +178,7 @@ void enumerate_proposals_cpu(const Dtype bottom4d[],
         p_proposal[2] = x + anchors[k * 4 + 2];
         p_proposal[3] = y + anchors[k * 4 + 3];
         //printf("%f\t%f\t%f\t%f\n", p_proposal[0], p_proposal[1], p_proposal[2], p_proposal[3]);
+        //std::cout << p_score[k * bottom_area] << std::endl;
         p_proposal[4]
             = transform_box(p_proposal,
                             dx, dy, d_log_w, d_log_h,
@@ -307,11 +315,28 @@ void ProposalLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
         feat_stride_);
 
     sort_box(proposals_.mutable_cpu_data(), 0, num_proposals - 1, pre_nms_topn_);
+    /*
+    const Dtype* t = proposals_.cpu_data();
+    std::cout << "Original after sort：" << std::endl;
+    for (int i = 0; i < num_proposals*5; ++i) {
+        if (i%5 ==0) {
+            std::cout << std::endl;
+        }
+        std::cout << t[i] << " ";
+    }
+    std::cout << std::endl;
+    */
 
     nms_cpu(pre_nms_topn,  proposals_.cpu_data(),
             roi_indices_.mutable_cpu_data(),  &num_rois,
             0,  nms_thresh_,  post_nms_topn_);
-
+    /*
+    const int* t = roi_indices_.cpu_data();
+    for (int i = 0; i < post_nms_topn_;++i) {
+        std::cout << t[i] << " ";
+    }
+    std::cout << std::endl;
+    */
     retrieve_rois_cpu(
         num_rois,  n,  proposals_.cpu_data(),  roi_indices_.cpu_data(),
         p_roi_item,  p_score_item);
